@@ -1,0 +1,7 @@
+{:banks
+ {:bank-name {:username "username"
+              :password "password"
+              :challenge [{:question "Do you answer these security questions honestly?"
+                           :answer "Hell no, that would be stupid. Password managers!"}
+                          {:question "question2"
+                           :answer "answer2"}]}}}
