@@ -5,4 +5,4 @@
 (defn -main
   []
   (tangerine/login)
-  (chase/download))
+  (chase/get-csv))

@@ -4,22 +4,39 @@
             [hickory.select :as s]
             [ledger-fetch.config :refer [config]]))
 
-(defn download
+(def cs (clj-http.cookies/cookie-store))
+
+(def baseurl (str "https://online.chasecanada.ca/ChaseCanada_Consumer/"))
+
+(defn get-answer
   []
-  (let [baseurl (str "https://online.chasecanada.ca/ChaseCanada_Consumer/")
-        my-cs (clj-http.cookies/cookie-store)]
-    (client/post (str baseurl "ProcessLogin.do")
-                 {:form-params {:username (-> config :banks :chase :username)
-                                :password (-> config :banks :chase :password)}
-                  :cookie-store my-cs})
-    (client/post (str baseurl "SecondaryAuth.do")
-                 {:form-params {:hintanswer (first
-                                             (mapv :answer
-                                                   (-> config :banks :chase :challenge)))}
-                  :cookie-store my-cs})
-    (client/get (str baseurl "TransHistory.do")
-                {:cookie-store my-cs})
-    (println (:body (client/post (str baseurl "DownLoadTransaction.do")
-                                 {:form-params {:downloadType "csv"
-                                                :cycleDate "00"}
-                                  :cookie-store my-cs})))))
+  ; There's only one possible question/answer with Chase
+  (first
+   (mapv :answer
+         (-> config :banks :chase :challenge))))
+
+(defn challenge-response
+  []
+  (client/post (str baseurl "SecondaryAuth.do")
+               {:form-params {:hintanswer (get-answer)}
+                :cookie-store cs}))
+
+(defn login
+  []
+  (client/post (str baseurl "ProcessLogin.do")
+               {:form-params {:username (-> config :banks :chase :username)
+                              :password (-> config :banks :chase :password)}
+                :cookie-store cs})
+  (challenge-response)
+  (client/get (str baseurl "TransHistory.do")
+              {:cookie-store cs}))
+
+(defn get-csv
+  []
+  (login)
+  (println
+   (:body
+    (client/post (str baseurl "DownLoadTransaction.do")
+                 {:form-params {:downloadType "csv"
+                                :cycleDate "00"}
+                  :cookie-store cs}))))

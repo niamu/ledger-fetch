@@ -4,51 +4,68 @@
             [hickory.select :as s]
             [ledger-fetch.config :refer [config]]))
 
+(def cs (clj-http.cookies/cookie-store))
+
+(def baseurl (str "https://secure.tangerine.ca/web/"))
+
+(defn send-username
+  []
+  (client/post (str baseurl "Tangerine.html")
+               {:form-params {:ACN (-> config :banks :tangerine :username)
+                              :command "PersonalCIF"}
+                :cookie-store cs}))
+
+(defn send-password
+  []
+  (client/post (str baseurl "Tangerine.html")
+               {:form-params {:PIN (-> config :banks :tangerine :password)
+                              :command "validatePINCommand"}
+                :cookie-store cs}))
+
+(defn get-answer
+  []
+  (let [html (:body
+              (client/get (str baseurl "Tangerine.html")
+                          {:query-params {:command "displayChallengeQuestion"}
+                           :cookie-store cs}))
+        element (s/select
+                 (s/child (s/class "content-main-wrapper")
+                          (s/tag :p))
+                 (hickory/as-hickory
+                  (hickory/parse html)))
+        question (first (:content (first element)))]
+    (first (mapv :answer
+                 (filter
+                  (fn
+                    [challenge]
+                    (= question
+                       (:question challenge)))
+                  (-> config :banks :tangerine :challenge))))))
+
 (defn challenge-response
-  [html bank]
-  (first (mapv :answer
-               (filter
-                (fn
-                  [challenge]
-                  (= (first (:content html))
-                     (:question challenge)))
-                (-> config :banks bank :challenge)))))
+  []
+  (client/post (str baseurl "Tangerine.html")
+               {:form-params {:Answer (get-answer)
+                              :command "verifyChallengeQuestion"}
+                :cookie-store cs}))
 
 (defn login
   []
-  (let [baseurl (str "https://secure.tangerine.ca/web/")
-        my-cs (clj-http.cookies/cookie-store)]
-    (client/get (str baseurl "InitialTangerine.html")
-                {:query-params {:command "displayLogin"
-                                :device "web"
-                                :locale "en_CA"}
-                 :cookie-store my-cs})
-    (client/post (str baseurl "Tangerine.html")
-                 {:form-params {:ACN (-> config :banks :tangerine :username)
-                                :command "PersonalCIF"}
-                  :cookie-store my-cs})
-    (client/post (str baseurl "Tangerine.html")
-                 {:form-params {:Answer (challenge-response
-                                         (first (s/select
-                                                 (s/child (s/class "content-main-wrapper")
-                                                          (s/tag :p))
-                                                 (hickory/as-hickory
-                                                  (hickory/parse
-                                                   (:body
-                                                    (client/get (str baseurl "Tangerine.html")
-                                                                {:query-params {:command "displayChallengeQuestion"}
-                                                                 :cookie-store my-cs}))))))
-                                         :tangerine)
-                                :command "verifyChallengeQuestion"}
-                  :cookie-store my-cs})
-    (client/post (str baseurl "Tangerine.html")
-                 {:form-params {:PIN (-> config :banks :tangerine :password)
-                                :command "validatePINCommand"}
-                  :cookie-store my-cs})
+  ; Initial login page request to setup cookies
+  (client/get (str baseurl "InitialTangerine.html")
+              {:query-params {:command "displayLogin"
+                              :device "web"
+                              :locale "en_CA"}
+               :cookie-store cs})
+  (send-username)
+  (challenge-response)
+  (send-password)
+  (client/get (str baseurl "Tangerine.html")
+              {:query-params {:command "PINPADPersonal"}
+               :cookie-store cs})
+  (println
+   (:body
     (client/get (str baseurl "Tangerine.html")
-                {:query-params {:command "PINPADPersonal"}
-                 :cookie-store my-cs})
-    (println (:body (client/get (str baseurl "Tangerine.html")
-                                {:query-params {:command "displayAccountSummary"
-                                                :fill 1}
-                                 :cookie-store my-cs})))))
+                {:query-params {:command "displayAccountSummary"
+                                :fill 1}
+                 :cookie-store cs}))))
