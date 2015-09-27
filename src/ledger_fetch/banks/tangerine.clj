@@ -22,7 +22,7 @@
                               :command "validatePINCommand"}
                 :cookie-store cs}))
 
-(defn get-answer
+(defn get-question
   []
   (let [html (:body
               (client/get (str baseurl "Tangerine.html")
@@ -32,15 +32,18 @@
                  (s/child (s/class "content-main-wrapper")
                           (s/tag :p))
                  (hickory/as-hickory
-                  (hickory/parse html)))
-        question (first (:content (first element)))]
-    (first (mapv :answer
-                 (filter
-                  (fn
-                    [challenge]
-                    (= question
-                       (:question challenge)))
-                  (-> config :banks :tangerine :challenge))))))
+                  (hickory/parse html)))]
+    (first (:content (first element)))))
+
+(defn get-answer
+  []
+  (first (mapv :answer
+               (filter
+                (fn
+                  [challenge]
+                  (= (get-question)
+                     (:question challenge)))
+                (-> config :banks :tangerine :challenge)))))
 
 (defn challenge-response
   []
